@@ -62,32 +62,6 @@
 请输入省份下城市名称(可选): 玉林
 请输入省份下城市下区域名称(可选): 
 请在20s内滑动验证码......
-[2023-11-14 14:39:53] 
-    select
-    lbp.province_name
-    ,lbp.city_name
-    ,lba.city_id
-    ,lba.sub_region_id
-    ,lba.sub_region_name
-    ,t.xiaoqu_id
-    ,t.xiaoqu_name
-    ,t.xiaoqu_url
-    from ftx_base_xiaoqu t
-    inner join ftx_base_areas lba on t.city_id = lba.city_id and t.region_id=lba.region_id and t.sub_region_id=lba.sub_region_id
-    inner join (select * from ftx_base_province where province_name='广西' and city_name='玉林' ) lbp on lba.city_id = lbp.city_id
-    left join ftx_xiaoqu_detail lxd on t.xiaoqu_id = lxd.xiaoqu_id
-    where 1=1
-      and lxd.xiaoqu_id is null
-    group by
-    lbp.province_name
-    ,lbp.city_name
-    ,lba.city_id
-    ,lba.sub_region_id
-    ,lba.sub_region_name
-    ,t.xiaoqu_id
-    ,t.xiaoqu_name
-    ,t.xiaoqu_url
-    ;
     
 开始采集[广西-玉林]区域下数据...
 [2023-11-14 14:39:54] (0/14) https://yl.esf.fang.com/loupan/2918228400/housedetail.htm
@@ -138,3 +112,11 @@ get_specific_value(xiaoqu_detail, '房屋总数')
 
 请勿将`fang_spider`应用到任何可能会违反法律规定和道德约束的工作中，请友善使用`fang_spider`，遵守蜘蛛协议，不要将`fang_spider`用于任何非法用途。如您选择使用`fang_spider`
 即代表您遵守此协议，作者不承担任何由于您违反此协议带来任何的法律风险和损失，一切后果由您承担。
+
+# 附录
+
+## 打包
+
+```
+pyinstaller --onefile --clean --noconfirm -n 房 fang.py
+```
