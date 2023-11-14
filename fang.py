@@ -7,16 +7,17 @@ import textwrap
 import time
 from datetime import datetime
 
+import pandas as pd
 import requests
 from lxml import etree
 from playwright.sync_api import sync_playwright
 
 cookies_path = "./fang_cookies.json"
-# 二手房验证URL
 housing_url = 'https://gz.esf.fang.com/housing/'
 default_headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
 }
+DEBUG = False
 
 
 class SQLiteDB:
@@ -299,6 +300,7 @@ def create_table():
         `xiaoqu_id`   varchar(255),
         `fwzs`        varchar(255), -- 房屋总数
         `ldzs`        varchar(255), -- 楼栋总数
+        `xqdz`        varchar(255), -- 小区地址
         `create_time` DATETIME DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime')),
         `update_time` DATETIME DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime'))
     );
@@ -376,7 +378,6 @@ def get_base_xiaoqu(page, url):
         final_result.extend(temp_xiaoqu_list)
         next_button = page.locator('text=下一页')
         if not next_button.is_visible():
-            print("没有下一页按钮，结束爬取。")
             break
         next_button.click()
         page.wait_for_load_state("load")
@@ -431,6 +432,60 @@ def get_base_areas(page, url):
     return final_result
 
 
+def to_excel(province_name, city, area):
+    current_timestamp = time.time()
+    current_timestamp = int(current_timestamp)
+    file_path = f'{province_name}数据_{current_timestamp}.xlsx'
+    lj_base_areas_sql = f"ftx_base_areas"
+    if city:
+        lj_base_province_sql = f"(select * from ftx_base_province where province_name='{province_name}' and city_name='{city}' )"
+        file_path = f'{province_name}-{city}数据_{current_timestamp}.xlsx'
+        if area:
+            lj_base_areas_sql = f"(select * from ftx_base_areas t where region_name='{area}')"
+            file_path = f'{province_name}-{city}-{area}数据_{current_timestamp}.xlsx'
+    else:
+        lj_base_province_sql = f"(select * from ftx_base_province where province_name='{province_name}' )"
+
+    sql = f'''
+    select 
+       lbp.province_name   as `省份`
+     , lbp.city_name       as `城市`
+     , lba.city_id         as `城市ID`
+     , lba.region_id       as `区域ID`
+     , lba.region_name     as `区域名称`
+     , lba.sub_region_id   as `子区域ID`
+     , lba.sub_region_name as `子区域名称`
+     , "`" || t.xiaoqu_id  as `小区ID`
+     , t.xiaoqu_name       as `小区名称`
+     , t.xiaoqu_url        as `小区URL`
+     , lxd.xqdz            as `小区地址`
+     , lxd.fwzs            as `房屋总数`
+     , lxd.ldzs            as `楼栋总数`
+from ftx_base_xiaoqu t
+left join {lj_base_areas_sql} lba on t.city_id = lba.city_id and t.region_id = lba.region_id and t.sub_region_id = lba.sub_region_id
+left join {lj_base_province_sql} lbp on lba.city_id = lbp.city_id
+left join ftx_xiaoqu_detail lxd on t.xiaoqu_id = lxd.xiaoqu_id
+where lbp.province_name = '{province_name}'
+group by 
+       lbp.province_name 
+     , lbp.city_name     
+     , lba.city_id      
+     , lba.region_id      
+     , lba.region_name     
+     , lba.sub_region_id   
+     , lba.sub_region_name 
+     , "`" || t.xiaoqu_id  
+     , t.xiaoqu_name      
+     , t.xiaoqu_url      
+     , lxd.fwzs        
+     , lxd.ldzs            
+;'''
+    query_list = db.query(sql)
+    result_df = pd.DataFrame(query_list)
+    result_df.to_excel(file_path, index=False)
+    Print.print2(f"导出成功:{file_path}")
+
+
 def db_init(page=None, province_name=None, city_name=None):
     if not province_name:
         raise Exception("未传递省份参数province_name")
@@ -439,7 +494,7 @@ def db_init(page=None, province_name=None, city_name=None):
     db.delete(table='ftx_base_province', condition=f" province_name='{province_name}' ")
     for province in province_list:
         if province['province_name'] == province_name:
-            db.insert(table='ftx_base_province', data=province, echo=True)
+            db.insert(table='ftx_base_province', data=province, echo=DEBUG)
 
     # 获取省份-城市下所有区域信息
     if city_name:
@@ -457,7 +512,7 @@ def db_init(page=None, province_name=None, city_name=None):
             area['city_id'] = city_id
             region_id = area['region_id']
 
-            db.insert(table='ftx_base_areas', data=area, echo=True)
+            db.insert(table='ftx_base_areas', data=area, echo=DEBUG)
 
             # 获取区域下所有小区信息
             sub_region_id = area['sub_region_id']
@@ -468,16 +523,18 @@ def db_init(page=None, province_name=None, city_name=None):
                     xiaoqu_id = xiaoqu['xiaoqu_id']
                     xiaoqu['city_id'] = city_id
                     xiaoqu['region_id'] = region_id
+                    xiaoqu['xiaoqu_url'] = "https:" + city_url + xiaoqu['xiaoqu_url']
                     xiaoqu['sub_region_id'] = sub_region_id
                     db.delete(table='ftx_base_xiaoqu',
                               condition=f" city_id='{city_id}' and xiaoqu_id='{xiaoqu_id}'")
-                    db.insert(table='ftx_base_xiaoqu', data=xiaoqu, echo=True)
+                    db.insert(table='ftx_base_xiaoqu', data=xiaoqu, echo=DEBUG)
             else:
                 Print.print2(f"{sub_region_url}下无小区信息")
     Print.print2(f"[{province_name}]省份下所有城市、区域、子区域、小区信息初始化完成......")
 
 
-def get_community_detail(url):
+def get_xiaoqu_detail(url):
+    # TODO 这里get请求可以使用ip代理
     response = requests.get(url)
     if response.status_code == 200:
         final_result = []
@@ -518,35 +575,42 @@ def get_community_detail(url):
         return final_result
 
 
+def get_specific_value(xiaoqu_detail, label):
+    for xiaoqu in xiaoqu_detail:
+        if xiaoqu['label'] == label:
+            return xiaoqu['value']
+    return None
+
+
 def process_list(all_xiaoqu_list):
+    list_size = len(all_xiaoqu_list)
     for index, xiaoqu in enumerate(all_xiaoqu_list):
         xiaoqu_id = xiaoqu['xiaoqu_id']
         db.delete(table='ftx_xiaoqu_detail', condition=f" xiaoqu_id = '{xiaoqu_id}'")
-        xiaoqu_url = xiaoqu['xiaoqu_url']
-        # TODO xiaoqu_url不对，需要处理
-        xiaoqu_detail = get_community_detail(url=xiaoqu_url)
+        xiaoqu_url = xiaoqu['xiaoqu_url'][:-4] + '/housedetail.htm'
+        xiaoqu_detail = get_xiaoqu_detail(url=xiaoqu_url)
+        Print.print2(f"({index}/{list_size}) {xiaoqu_url}")
         if xiaoqu_detail:
             insert_detail = {
                 'xiaoqu_id': xiaoqu_id,
-                'fwzs': xiaoqu_detail,  # TODO，只获取需求所需字段
-                'ldzs': xiaoqu_detail  # TODO，只获取需求所需字段
+                'fwzs': get_specific_value(xiaoqu_detail, '房屋总数'),
+                'ldzs': get_specific_value(xiaoqu_detail, '楼栋总数'),
+                'xqdz': get_specific_value(xiaoqu_detail, '小区地址')
             }
             db.insert(table='ftx_xiaoqu_detail', data=insert_detail)
 
 
 def spider_by_condition(province, city=None, area=None):
-    echo_msg = f"开始采集[{province}"
+    area_msg = f"{province}"
     ftx_base_areas_sql = f"ftx_base_areas"
     if city:
-        echo_msg += f"-{city}"
+        area_msg += f"-{city}"
         ftx_base_province_sql = f"(select * from ftx_base_province where province_name='{province}' and city_name='{city}' )"
         if area:
-            echo_msg += f"-{area}"
+            area_msg += f"-{area}"
             ftx_base_areas_sql = f"(select * from ftx_base_areas t where region_name='{area}')"
     else:
         ftx_base_province_sql = f"(select * from ftx_base_province where province_name='{province}' )"
-    echo_msg += f"]区域下数据..."
-    Print.print2(echo_msg)
 
     sql = f"""
     select
@@ -577,16 +641,20 @@ def spider_by_condition(province, city=None, area=None):
     """
     Print.print2(sql)
     all_xiaoqu = db.query(sql)
-    process_list(all_xiaoqu)
+    if all_xiaoqu:
+        Print.green(f"开始采集[{area_msg}]区域下数据...")
+        process_list(all_xiaoqu)
+    else:
+        Print.red(f"[{area_msg}]区域下无小区信息，请先进行区域信息初始化.")
 
 
 def main():
     try:
-        # disclaimer_accepted = print_disclaimer()
-        # if not disclaimer_accepted:
-        #     exit()
+        disclaimer_accepted = print_disclaimer()
+        if not disclaimer_accepted:
+            exit()
         create_table()
-        print("功能选项：\n1. 按区域导出\n2. 重置区域信息")
+        print("功能选项：\n1. 按区域采集并导出\n2. 区域信息初始化")
         function_choice = input("请输入功能序号: ")
         province = input("请输入省份名称(必填): ")
         city = input("请输入省份下城市名称(可选): ")
@@ -606,16 +674,16 @@ def main():
                 page = context.new_page()
                 page.set_default_timeout(200000)
                 page.goto(housing_url)
-                Print.red("请在20s内滑动验证码......20s后程序自动退出")
+                Print.red("请在20s内滑动验证码......")
                 time.sleep(20)
 
                 context.storage_state(path=cookies_path)
 
                 if function_choice == '1':
                     spider_by_condition(province=province, city=city, area=area)
+                    to_excel(province, city, area)
                 elif function_choice == '2':
                     db_init(page=page, province_name=province, city_name=city)
-
                 context.close()
                 browser.close()
         else:
@@ -627,3 +695,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    Print.green("程序运行完成...")
