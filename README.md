@@ -47,10 +47,12 @@
     2. `pip install virtualenv`
     3. `virtualenv venv`
 3. 安装依赖库`pip install -r requirements.txt`
-4. 安装playwright的chromium浏览器引擎
-    1. `playwright install chromium`
+4. 安装playwright的chromium浏览器引擎，注意：先设置驱动安装路径，默认情况下playwright会安装C盘用户目录下，这样会导致pyinstaller打包的时候找不到chrome.exe程序 
+   1. 设置驱动安装路径`set PLAYWRIGHT_BROWSERS_PATH=0`其中0表示安装在当前目录，建议在项目根目录下执行该命令 
+   2. 安装对应浏览器驱动`playwright install chromium`只安装自己所需浏览器即可，不用安装所有浏览器，否则打包exe文件太大
+   3. 打包命令`pyinstaller --onefile --clean --noconfirm -n Fang-0.0.1-windows-x86_64 fang.py`
 5. 运行`python fang.py`
-6. 根据提示输入对应信息采集
+6. 根据提示输入对应信息采集，如下示例：
 
 ```
 ######################################################################################################################
@@ -117,11 +119,3 @@ get_specific_value(xiaoqu_detail, '房屋总数')
 
 请勿将`fang_spider`应用到任何可能会违反法律规定和道德约束的工作中，请友善使用`fang_spider`，遵守蜘蛛协议，不要将`fang_spider`用于任何非法用途。如您选择使用`fang_spider`
 即代表您遵守此协议，作者不承担任何由于您违反此协议带来任何的法律风险和损失，一切后果由您承担。
-
-# 附录
-
-## 打包
-
-```
-pyinstaller --onefile --clean --noconfirm -n 房 fang.py
-```
