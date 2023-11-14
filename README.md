@@ -95,7 +95,9 @@ Process finished with exit code 0
 
 ## 数据存储
 
-- 程序运行时会使用sqlite数据库存储当前job运行历史，数据库文件`fang.db`
+- 程序运行时会使用sqlite数据库存储当前采集的所有数据信息
+  - 数据库文件`fang.db`
+  - 数据库表参考`fang.py`里create_table()函数内容
 
 ## 采集更多信息
 
