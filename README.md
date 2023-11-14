@@ -36,6 +36,11 @@
 
 # 快速开始
 
+## 直接下载可执行程序双击执行
+
+从 [releases](https://github.com/fangzheng0518/fang_spider/releases/)页面下载对应可执行程序，双击运行
+
+## 源码运行
 1. clone本项目代码
 2. 在项目根目录创建Python虚拟环境venv
     1. `cd fang_spider`
