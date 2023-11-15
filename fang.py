@@ -645,7 +645,8 @@ def spider_by_condition(province, city=None, area=None):
         Print.green(f"开始采集[{area_msg}]区域下数据...")
         process_list(all_xiaoqu)
     else:
-        Print.red(f"[{area_msg}]区域下无小区信息，请先进行区域信息初始化.")
+        # Print.red(f"[{area_msg}]区域下无小区信息，请先进行区域信息初始化.")
+        raise Exception(f"[{area_msg}]区域下无小区信息，请先进行区域信息初始化.")
 
 
 def main():
